@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سامانه تصحیح خودکار پاسخنامه - نسخه نهایی</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.3/dist/tesseract.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4e54c8;
+            --secondary-color: #8f94fb;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+        }
+        
+        body {
+            font-family: 'Vazir', 'Tanha', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
+            padding-top: 20px;
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 60%);
+            transform: rotate(30deg);
+        }
+        
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            border: none;
+            transition: transform 0.3s, box-shadow 0.3s;
+            overflow: hidden;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 20px rgba(0,0,0,0.1);
+        }
+        
+        .camera-container {
+            width: 100%;
+            height: 350px;
+            background-color: #f8f9fa;
+            border: 2px dashed #ced4da;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 10px;
+        }
+        
+        .scan-area {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 60%;
+            border: 3px solid var(--success-color);
+            box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.4);
+            z-index: 10;
+            pointer-events: none;
+            border-radius: 12px;
+        }
+        
+        .id-scan-area {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            height: 15%;
+            border: 3px solid var(--info-color);
+            box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.2);
+            z-index: 10;
+            pointer-events: none;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .progress-container {
+            margin: 15px 0;
+        }
+        
+        .stats-box {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .stats-number {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        
+        .answer-key-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .answer-key-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .answer-key-item:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+        
+        .mobile-help {
+            display: none;
+        }
+        
+        @media (max-width: 992px) {
+            .answer-key-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .camera-container {
+                height: 300px;
+            }
+            
+            .answer-key-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            
+            .mobile-help {
+                display: block;
+                margin-top: 15px;
+            }
+            
+            .desktop-only {
+                display: none;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .answer-key-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .header p {
+                font-size: 0.9rem;
+            }
+        }
+        
+        .processing-steps {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .step-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            background: white;
+        }
+        
+        .step-number {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 10px;
+            font-weight: bold;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .mobile-permission-guide {
+            display: none;
+            background: #fff8e1;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            border-right: 4px solid #ffd54f;
+        }
+        
+        .is-mobile .mobile-permission-guide {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="bi bi-patch-check"></i> سامانه تصحیح خودکار پاسخنامه</h1>
+            <p class="mb-0">پردازش همزمان شماره دانشجویی و پاسخ‌ها با یکبار اسکن</p>
+        </div>
+
+        <div class="mobile-permission-guide">
+            <h5><i class="bi bi-phone"></i> راهنمای دسترسی دوربین در موبایل</h5>
+            <p>برای استفاده از دوربین در موبایل:</p>
+            <ol>
+                <li>از مرورگر Chrome یا Firefox استفاده کنید</li>
+                <li>به سایت اجازه دسترسی به دوربین را بدهید</li>
+                <li>مطمئن شوید که سایت از طریق HTTPS بارگذاری شده است</li>
+            </ol>
+            <p class="mb-0">برای تست محلی، از نرم‌افزارهای مانند ngrok استفاده کنید.</p>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <i class="bi bi-key"></i> تعریف کلید پاسخ
+                    </div>
+                    <div class="card-body">
+                        <div class="answer-key-grid" id="answerKeyContainer">
+                            <!-- پاسخ ها به صورت داینامیک ایجاد می شوند -->
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-success" id="saveAnswerKey">
+                                <i class="bi bi-check-circle"></i> ذخیره کلید پاسخ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <i class="bi bi-camera"></i> اسکن پاسخنامه
+                    </div>
+                    <div class="card-body">
+                        <div class="processing-steps">
+                            <h5>مراحل پردازش:</h5>
+                            <div class="step-item">
+                                <div class="step-number">1</div>
+                                <div class="step-content">شناسایی شماره دانشجویی از بالای پاسخنامه</div>
+                            </div>
+                            <div class="step-item">
+                                <div class="step-number">2</div>
+                                <div class="step-content">تشخیص پاسخ‌های هر ۴۰ سوال</div>
+                            </div>
+                            <div class="step-item">
+                                <div class="step-number">3</div>
+                                <div class="step-content">مقایسه با کلید پاسخ و محاسبه نمره</div>
+                            </div>
+                            <div class="step-item">
+                                <div class="step-number">4</div>
+                                <div class="step-content">ذخیره نتایج و نمایش گزارش</div>
+                            </div>
+                        </div>
+
+                        <div class="camera-container text-center">
+                            <video id="video" autoplay playsinline></video>
+                            <canvas id="canvas" style="display:none;"></canvas>
+                            <div class="scan-area" id="scanArea" style="display: none;"></div>
+                            <div class="id-scan-area" id="idScanArea"></div>
+                        </div>
+
+                        <div class="progress-container" id="progressContainer" style="display: none;">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <p class="text-center mt-2" id="progressText">در حال پردازش تصویر...</p>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button id="startCamera" class="btn btn-primary mb-2">
+                                <i class="bi bi-camera-video"></i> روشن کردن دوربین
+                            </button>
+                            <button id="capture" class="btn btn-success" disabled>
+                                <i class="bi bi-camera"></i> اسکن و پردازش پاسخنامه
+                            </button>
+                        </div>
+
+                        <div class="mobile-help alert alert-info mt-3">
+                            <i class="bi bi-info-circle"></i> در صورت مشکل در دسترسی به دوربین، از مرورگر Chrome یا Firefox استفاده کنید و مطمئن شوید که سایت از طریق HTTPS بارگذاری شده است.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <i class="bi bi-info-circle"></i> راهنمای استفاده
+                    </div>
+                    <div class="card-body">
+                        <h5>نحوه آماده‌سازی پاسخنامه:</h5>
+                        <ul>
+                            <li>شماره دانشجویی را <strong>در بالای پاسخنامه</strong> بنویسید</li>
+                            <li>از <strong>خودکار مشکی یا آبی پررنگ</strong> استفاده کنید</li>
+                            <li>پاسخ‌ها را <strong>کاملاً داخل خانه‌ها</strong> علامت بزنید</li>
+                            <li>مطمئن شوید که <strong>نور کافی</strong> وجود دارد</li>
+                        </ul>
+
+                        <div class="alert alert-info mt-3">
+                            <strong>توجه:</strong> برنامه به طور همزمان شماره دانشجویی و پاسخ‌ها را پردازش می‌کند.
+                            برای بهترین نتیجه، پاسخنامه را به طور کامل در کادر دوربین قرار دهید.
+                        </div>
+
+                        <div class="desktop-only alert alert-warning mt-3">
+                            <strong>کاربران موبایل:</strong> برای بهترین نتیجه، از حالت افقی (landscape) استفاده کنید و پاسخنامه را در مرکز کادر قرار دهید.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header bg-warning text-dark">
+                        <i class="bi bi-card-checklist"></i> نتیجه پردازش
+                    </div>
+                    <div class="card-body">
+                        <div id="processingResult">
+                            <p class="text-center text-muted">هنوز پردازشی انجام نشده است</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        <i class="bi bi-download"></i> دریافت خروجی
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-success mb-2" id="exportExcel">
+                                <i class="bi bi-file-earmark-spreadsheet"></i> خروجی اکسل
+                            </button>
+                            <button class="btn btn-danger" id="exportPDF">
+                                <i class="bi bi-file-earmark-pdf"></i> خروجی PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // متغیرهای global
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        let currentStream = null;
+        let students = [];
+        let results = [];
+        let answerKey = Array(40).fill(null);
+        let isProcessing = false;
+        let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        // افزودن کلاس is-mobile به body اگر کاربر با موبایل وارد شده باشد
+        if (isMobile) {
+            document.body.classList.add('is-mobile');
+        }
+
+        // ایجاد شبکه کلید پاسخ
+        function initializeAnswerKey() {
+            const container = document.getElementById('answerKeyContainer');
+            container.innerHTML = '';
+            
+            for (let i = 0; i < 40; i++) {
+                const item = document.createElement('div');
+                item.className = 'answer-key-item';
+                
+                const label = document.createElement('label');
+                label.textContent = `سوال ${i + 1}:`;
+                label.className = 'form-label';
+                
+                const select = document.createElement('select');
+                select.className = 'form-select';
+                select.innerHTML = `
+                    <option value="">انتخاب کنید</option>
+                    <option value="الف">الف</option>
+                    <option value="ب">ب</option>
+                    <option value="ج">ج</option>
+                    <option value="د">د</option>
+                `;
+                select.addEventListener('change', (e) => {
+                    answerKey[i] = e.target.value;
+                });
+                
+                item.appendChild(label);
+                item.appendChild(select);
+                container.appendChild(item);
+            }
+        }
+
+        // راه‌اندازی دوربین
+        document.getElementById('startCamera').addEventListener('click', async function() {
+            try {
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                    currentStream = null;
+                    video.style.display = 'none';
+                    this.innerHTML = '<i class="bi bi-camera-video"></i> روشن کردن دوربین';
+                    document.getElementById('capture').disabled = true;
+                    return;
+                }
+
+                // اضافه کردن constraints برای سازگاری بهتر با موبایل
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                video.srcObject = stream;
+                currentStream = stream;
+                video.style.display = 'block';
+                this.innerHTML = '<i class="bi bi-camera-video-off"></i> خاموش کردن دوربین';
+                document.getElementById('capture').disabled = false;
+                
+                // نمایش ناحیه اسکن
+                document.getElementById('scanArea').style.display = 'block';
+                document.getElementById('idScanArea').style.display = 'block';
+                
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                
+                // نمایش راهنمای دسترسی به دوربین در موبایل
+                if(isMobile) {
+                    alert('دسترسی به دوربین ممکن نیست. لطفاً:\n1. از مرورگر Chrome یا Firefox استفاده کنید\n2. به سایت اجازه دسترسی به دوربین داده‌اید\n3. مطمئن شوید سایت از طریق HTTPS بارگذاری شده است');
+                } else {
+                    alert('دسترسی به دوربین ممکن نیست. لطفا مجوزها را بررسی کنید.');
+                }
+            }
+        });
+
+        // گرفتن عکس و پردازش پاسخنامه
+        document.getElementById('capture').addEventListener('click', function() {
+            if (isProcessing) return;
+            
+            // بررسی اینکه کلید پاسخ تعریف شده است
+            if (answerKey.includes(null)) {
+                alert('لطفا ابتدا کلید پاسخ را کامل تعریف کنید.');
+                return;
+            }
+            
+            isProcessing = true;
+            
+            // نمایش نوار پیشرفت
+            document.getElementById('progressContainer').style.display = 'block';
+            simulateProgress();
+            
+            // تنظیم ابعاد کانواس
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // کشیدن فریم فعلی ویدیو روی کانواس
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // پردازش پاسخنامه
+            processAnswerSheet();
+        });
+
+        // شبیه‌سازی پیشرفت پردازش
+        function simulateProgress() {
+            const progressBar = document.querySelector('.progress-bar');
+            const progressText = document.getElementById('progressText');
+            let width = 0;
+            
+            const interval = setInterval(() => {
+                if (width >= 100) {
+                    clearInterval(interval);
+                } else {
+                    width += 2;
+                    progressBar.style.width = width + '%';
+                    
+                    if (width < 25) {
+                        progressText.textContent = 'در حال پردازش تصویر...';
+                    } else if (width < 50) {
+                        progressText.textContent = 'در حال تشخیص شماره دانشجویی...';
+                    } else if (width < 75) {
+                        progressText.textContent = 'در حال تشخیص پاسخ‌ها...';
+                    } else {
+                        progressText.textContent = 'در حال محاسبه نمره...';
+                    }
+                }
+            }, 100);
+        }
+
+        // پردازش کامل پاسخنامه
+        async function processAnswerSheet() {
+            try {
+                // گرفتن داده‌های تصویر
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // ۱. تشخیص شماره دانشجویی
+                const studentId = await recognizeStudentId(imageData);
+                
+                if (!studentId) {
+                    throw new Error('شماره دانشجویی تشخیص داده نشد');
+                }
+                
+                // ۲. پیدا کردن یا ایجاد دانشجو
+                let student = students.find(s => s.id === studentId);
+                if (!student) {
+                    student = {
+                        id: studentId,
+                        name: `دانشجو ${studentId}`,
+                        exams: 0,
+                        average: 0
+                    };
+                    students.push(student);
+                    saveStudents();
+                }
+                
+                // ۳. تشخیص پاسخ‌ها
+                const studentAnswers = await recognizeAnswers(imageData);
+                
+                // ۴. محاسبه نمره
+                let correctCount = 0;
+                let wrongCount = 0;
+                let multipleChoices = 0;
+                let emptyAnswers = 0;
+                
+                for (let i = 0; i < 40; i++) {
+                    if (studentAnswers[i] === null) {
+                        emptyAnswers++;
+                    } else if (studentAnswers[i] === 'multiple') {
+                        multipleChoices++;
+                        wrongCount++;
+                    } else if (studentAnswers[i] === answerKey[i]) {
+                        correctCount++;
+                    } else {
+                        wrongCount++;
+                    }
+                }
+                
+                const score = correctCount * 0.5;
+                
+                // ۵. ذخیره نتیجه
+                addResult(student.name, student.id, correctCount, wrongCount, score, multipleChoices, emptyAnswers);
+                
+                // نمایش نتیجه
+                showProcessingResult(student.name, student.id, correctCount, wrongCount, score, multipleChoices, emptyAnswers);
+                
+                // مخفی کردن نوار پیشرفت
+                setTimeout(() => {
+                    document.getElementById('progressContainer').style.display = 'none';
+                    isProcessing = false;
+                }, 1000);
+                
+            } catch (error) {
+                console.error('خطا در پردازش پاسخنامه:', error);
+                document.getElementById('progressContainer').style.display = 'none';
+                isProcessing = false;
+                
+                // نمایش خطا
+                document.getElementById('processingResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5>خطا در پردازش</h5>
+                        <p>${error.message}</p>
+                        <p>لطفا مطمئن شوید که:</p>
+                        <ul>
+                            <li>شماره دانشجویی در بالای پاسخنامه نوشته شده است</li>
+                            <li>پاسخنامه به طور کامل در کادر دوربین قرار دارد</li>
+                            <li>نور محیط کافی است</li>
+                        </ul>
+                    </div>
+                `;
+            }
+        }
+
+        // تشخیص شماره دانشجویی
+        async function recognizeStudentId(imageData) {
+            // گرفتن ناحیه بالای تصویر (20% اول)
+            const height = imageData.height;
+            const idAreaHeight = Math.floor(height * 0.2);
+            const idAreaData = ctx.getImageData(0, 0, imageData.width, idAreaHeight);
+            
+            // ایجاد یک کانvas موقت برای پردازش
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = imageData.width;
+            tempCanvas.height = idAreaHeight;
+            tempCtx.putImageData(idAreaData, 0, 0);
+            
+            // بهبود کنتراست برای تشخیص بهتر
+            const processedImage = enhanceImageContrast(tempCanvas);
+            
+            // استفاده از Tesseract.js برای تشخیص متن
+            try {
+                const result = await Tesseract.recognize(
+                    processedImage,
+                    'eng',
+                    { 
+                        logger: message => console.log(message),
+                        tessedit_char_whitelist: '0123456789'
+                    }
+                );
+                
+                // استخراج و پاکسازی شماره دانشجویی
+                const studentId = result.data.text.replace(/\D/g, '');
+                
+                return studentId.length >= 3 ? studentId : null;
+            } catch (error) {
+                console.error('خطا در تشخیص شماره دانشجویی:', error);
+                return null;
+            }
+        }
+
+        // بهبود کنتراست تصویر
+        function enhanceImageContrast(canvas) {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            tempCtx.drawImage(canvas, 0, 0);
+            
+            return tempCanvas;
+        }
+
+        // تشخیص پاسخ‌ها (شبیه‌سازی شده)
+        async function recognizeAnswers(imageData) {
+            // در اینجا الگوریتم واقعی تشخیص پاسخ‌ها پیاده‌سازی می‌شود
+            // برای نمونه، پاسخ‌های تصادفی تولید می‌کنیم
+            
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const options = ['الف', 'ب', 'ج', 'د'];
+                    const answers = [];
+                    
+                    for (let i = 0; i < 40; i++) {
+                        const rand = Math.random();
+                        
+                        if (rand < 0.7) {
+                            // پاسخ صحیح
+                            answers.push(answerKey[i]);
+                        } else if (rand < 0.8) {
+                            // پاسخ غلط
+                            const wrongOptions = options.filter(opt => opt !== answerKey[i]);
+                            answers.push(wrongOptions[Math.floor(Math.random() * wrongOptions.length)]);
+                        } else if (rand < 0.9) {
+                            // پاسخ دوگانه
+                            answers.push('multiple');
+                        } else {
+                            // بدون پاسخ
+                            answers.push(null);
+                        }
+                    }
+                    
+                    resolve(answers);
+                }, 2000);
+            });
+        }
+
+        // نمایش نتیجه پردازش
+        function showProcessingResult(name, id, correct, wrong, score, multipleChoices, emptyAnswers) {
+            const resultDiv = document.getElementById('processingResult');
+            
+            let detailsHtml = '';
+            if (multipleChoices > 0) {
+                detailsHtml += `<p>تعداد سوالات با پاسخ دوگانه: <strong>${multipleChoices}</strong></p>`;
+            }
+            if (emptyAnswers > 0) {
+                detailsHtml += `<p>تعداد سوالات بدون پاسخ: <strong>${emptyAnswers}</strong></p>`;
+            }
+            
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h5>نتیجه پردازش پاسخنامه</h5>
+                    <p>نام دانشجو: <strong>${name}</strong></p>
+                    <p>شماره دانشجویی: <strong>${id}</strong></p>
+                    <p>تعداد صحیح: <strong>${correct}</strong></p>
+                    <p>تعداد غلط: <strong>${wrong}</strong></p>
+                    <p>نمره نهایی: <strong>${score.toFixed(2)}</strong></p>
+                    ${detailsHtml}
+                </div>
+            `;
+        }
+
+        // افزودن نتیجه
+        function addResult(name, id, correct, wrong, score, multipleChoices, emptyAnswers) {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('fa-IR');
+            const timeStr = now.toLocaleTimeString('fa-IR');
+            
+            results.push({
+                name,
+                id,
+                correct,
+                wrong,
+                score,
+                multipleChoices,
+                emptyAnswers,
+                date: dateStr,
+                time: timeStr
+            });
+            
+            // به روزرسانی آمار دانشجو
+            const studentIndex = students.findIndex(s => s.id === id);
+            if (studentIndex !== -1) {
+                students[studentIndex].exams++;
+                const studentResults = results.filter(r => r.id === id);
+                const totalScore = studentResults.reduce((sum, result) => sum + result.score, 0);
+                students[studentIndex].average = totalScore / studentResults.length;
+            }
+            
+            saveResults();
+            saveStudents();
+        }
+
+        // ذخیره کلید پاسخ
+        document.getElementById('saveAnswerKey').addEventListener('click', function() {
+            if (answerKey.includes(null)) {
+                alert('لطفا به تمام سوالات پاسخ دهید.');
+                return;
+            }
+            
+            localStorage.setItem('answerKey', JSON.stringify(answerKey));
+            alert('کلید پاسخ با موفقیت ذخیره شد.');
+        });
+
+        // بارگذاری کلید پاسخ از localStorage
+        function loadAnswerKey() {
+            const savedAnswerKey = localStorage.getItem('answerKey');
+            if (savedAnswerKey) {
+                answerKey = JSON.parse(savedAnswerKey);
+                const selects = document.querySelectorAll('#answerKeyContainer select');
+                
+                for (let i = 0; i < 40; i++) {
+                    if (answerKey[i]) {
+                        selects[i].value = answerKey[i];
+                    }
+                }
+            }
+        }
+
+        // ذخیره دانشجویان در localStorage
+        function saveStudents() {
+            localStorage.setItem('students', JSON.stringify(students));
+        }
+
+        // بارگذاری دانشجویان از localStorage
+        function loadStudents() {
+            const savedStudents = localStorage.getItem('students');
+            if (savedStudents) {
+                students = JSON.parse(savedStudents);
+            }
+        }
+
+        // ذخیره نتایج در localStorage
+        function saveResults() {
+            localStorage.setItem('results', JSON.stringify(results));
+        }
+
+        // بارگذاری نتایج از localStorage
+        function loadResults() {
+            const savedResults = localStorage.getItem('results');
+            if (savedResults) {
+                results = JSON.parse(savedResults);
+            }
+        }
+
+        // مقداردهی اولیه
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeAnswerKey();
+            loadAnswerKey();
+            loadStudents();
+            loadResults();
+        });
+    </script>
+</body>
+</html>
